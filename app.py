@@ -50,20 +50,59 @@ def dashboard(df):
     totals = df.groupby("이름")["금액"].sum().sort_index()
     st.subheader("사람별 총 채무")
     st.bar_chart(totals, y_label="금액 (원)", color="#237C72")
-    st.subheader("기간별 누적 채무")
-    scope = st.radio("조회 대상", ["전체", "나"], horizontal=True)
-    period = st.selectbox("집계 단위", ["일별", "월별"])
-    part = (df if scope == "전체" else my).copy()
-    if part.empty:
-        st.info("이 이름으로 등록된 기록이 없습니다.")
-    else:
-        part["기간"] = part["날짜"].str[:7 if period == "월별" else 10]
-        trend = part.groupby("기간")["금액"].sum().cumsum().reset_index()
-        st.vega_lite_chart(trend, {"mark":{"type":"line","point":True,"color":"#237C72"},
-            "encoding":{"x":{"field":"기간","type":"ordinal","sort":"ascending"},
-                        "y":{"field":"금액","type":"quantitative","title":"누적 금액 (원)"},
-                        "tooltip":[{"field":"기간"},{"field":"금액","format":",d","type":"quantitative"}]}},
-            use_container_width=True)
+    st.subheader("사람별 기간별 누적 채무")
+period = st.selectbox("집계 단위", ["일별", "월별"], key="line_period")
+
+people = sorted(df["이름"].unique())
+tabs = st.tabs(people)
+
+for person, tab in zip(people, tabs):
+    with tab:
+        person_df = df[df["이름"] == person].copy()
+        period_length = 7 if period == "월별" else 10
+        person_df["기간"] = person_df["날짜"].str[:period_length]
+
+        trend = (
+            person_df.groupby("기간")["금액"]
+            .sum()
+            .sort_index()
+            .cumsum()
+            .reset_index()
+        )
+
+        st.vega_lite_chart(
+            trend,
+            {
+                "mark": {
+                    "type": "line",
+                    "point": True,
+                    "color": "#237C72",
+                },
+                "encoding": {
+                    "x": {
+                        "field": "기간",
+                        "type": "ordinal",
+                        "sort": "ascending",
+                        "title": "기간",
+                    },
+                    "y": {
+                        "field": "금액",
+                        "type": "quantitative",
+                        "title": "누적 채무 금액 (원)",
+                    },
+                    "tooltip": [
+                        {"field": "기간", "title": "기간"},
+                        {
+                            "field": "금액",
+                            "type": "quantitative",
+                            "format": ",d",
+                            "title": "누적 금액",
+                        },
+                    ],
+                },
+            },
+            use_container_width=True,
+        )
     days = df.groupby("이름")["날짜"].min().map(lambda d: (today - datetime.fromisoformat(d).date()).days)
     for col, title, series, unit in zip(st.columns(2), ["총 채무 TOP 3","채무 기간 TOP 3"],
                                         [totals, days], ["원","일"]):
